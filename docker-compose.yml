@@ -1,0 +1,27 @@
+version: '3.2'
+services:
+  database:
+    image: postgres:15.4
+    env_file:
+      - database.env # configure postgres
+    ports:
+      - "6543:5432"
+    volumes:
+      - database-data:/var/lib/postgresql/data/ # persist data even if container shuts down
+
+  flask_app:
+    build:
+      context: .  # Build context is the current directory
+    ports:
+      - "5000:5000"  # Adjust the port as needed
+    depends_on:
+      - database
+    environment:
+      DB_HOST: database  # The service name is the hostname for the database connection
+      DB_PORT: 5432  # Default PostgreSQL port
+      DB_USER: rosen  # PostgreSQL username
+      DB_PASSWORD: airline_manager  # PostgreSQL password
+      DB_NAME: airline_db  # PostgreSQL database name
+
+volumes:
+  database-data: # named volumes can be managed easier using docker-compose

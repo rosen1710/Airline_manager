@@ -1,8 +1,14 @@
 -- DROP TABLE flights;
 -- DROP TABLE aircrafts;
 -- DROP TABLE destinations;
--- INSERT INTO destinations VALUES (DEFAULT, 'SOF', 'Sofia', 'Bulgaria', 'BG');
--- INSERT INTO aircrafts VALUES (DEFAULT, 'A320', 20000, 20, 200, 1);
+-- INSERT INTO destinations VALUES (DEFAULT, 'Sofia International Airport', 'SOF', 'Sofia', 'Bulgaria', 'BG');
+-- INSERT INTO destinations VALUES (DEFAULT, 'Varna Airport', 'VAR', 'Varna', 'Bulgaria', 'BG');
+-- INSERT INTO destinations VALUES (DEFAULT, 'London Heathrow Airport', 'LHR', 'London', 'United Kingdom', 'UK');
+-- INSERT INTO aircrafts VALUES (DEFAULT, 'Airbus', 'A320', 20000, 20, 200, 1);
+-- INSERT INTO aircrafts VALUES (DEFAULT, 'Airbus', 'A319', 18000, 12, 160, 1);
+-- INSERT INTO aircrafts VALUES (DEFAULT, 'Boeing', 'B738', 16000, 12, 180, 1);
+-- INSERT INTO aircrafts VALUES (DEFAULT, 'Embraer', 'E190', 14000, 8, 92, 1);
+-- INSERT INTO flights VALUES (DEFAULT, 1, 'FB977', 1, 2, NOW(), NOW(), 500, 140);
 SELECT * FROM destinations;
 SELECT * FROM aircrafts;
 SELECT * FROM flights;

@@ -34,6 +34,7 @@ def create_tables():
             CREATE TABLE IF NOT EXISTS destinations (
                 id SERIAL PRIMARY KEY,
                 airport_name TEXT NOT NULL,
+                airport_code TEXT NOT NULL,
                 city TEXT NOT NULL,
                 country TEXT NOT NULL,
                 country_code TEXT NOT NULL
@@ -43,7 +44,8 @@ def create_tables():
         aircrafts_table = """
             CREATE TABLE IF NOT EXISTS aircrafts (
                 id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
+                manufacturer TEXT NOT NULL,
+                type TEXT NOT NULL,
                 km_range INTEGER NOT NULL,
                 first_class_capacity INTEGER NOT NULL,
                 economy_class_capacity INTEGER NOT NULL,
@@ -84,12 +86,13 @@ def add_destination():
 
     data = request.json
     airport_name = data['airport_name']
+    airport_code = data['airport_code']
     city = data['city']
     country = data['country']
     country_code = data['country_code']
 
-    cur.execute("INSERT INTO destinations (airport_name, city, country, country_code) VALUES (%s, %s, %s, %s) RETURNING id;",
-                (airport_name, city, country, country_code))
+    cur.execute("INSERT INTO destinations (airport_name, airport_code, city, country, country_code) VALUES (%s, %s, %s, %s, %s) RETURNING id;",
+                (airport_name, airport_code, city, country, country_code))
     destination_id = cur.fetchone()[0]
 
     conn.commit()
@@ -104,14 +107,15 @@ def add_aircraft():
     cur = conn.cursor()
 
     data = request.json
-    name = data['name']
+    manufacturer = data['manufacturer']
+    type = data['type']
     km_range = data['km_range']
     first_class_capacity = data['first_class_capacity']
     economy_class_capacity = data['economy_class_capacity']
     location = data['location']
 
-    cur.execute("INSERT INTO aircrafts (name, km_range, first_class_capacity, economy_class_capacity, location) VALUES (%s, %s, %s, %s, %s) RETURNING id;",
-                (name, km_range, first_class_capacity, economy_class_capacity, location))
+    cur.execute("INSERT INTO aircrafts (manufacturer, type, km_range, first_class_capacity, economy_class_capacity, location) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id;",
+                (manufacturer, type, km_range, first_class_capacity, economy_class_capacity, location))
     aircraft_id = cur.fetchone()[0]
 
     conn.commit()
@@ -193,11 +197,11 @@ def update_destination(destination_id):
     # You can update specific columns here based on your requirements
     cur.execute("""
         UPDATE destinations 
-        SET airport_name = %s, city = %s, country = %s, country_code = %s
+        SET airport_name = %s, airport_code = %s, city = %s, country = %s, country_code = %s
         WHERE id = %s
         RETURNING id;
         """,
-        (data['airport_name'], data['city'], data['country'], data['country_code'], destination_id))
+        (data['airport_name'], data['airport_code'], data['city'], data['country'], data['country_code'], destination_id))
 
     updated_destination_id = cur.fetchone()[0]
 
@@ -205,19 +209,6 @@ def update_destination(destination_id):
     conn.close()
 
     return jsonify({"message": "Destination updated successfully", "destination_id": updated_destination_id})
-
-# Function to delete a destination
-@app.route('/destinations/<int:destination_id>', methods=['DELETE'])
-def delete_destination(destination_id):
-    conn = create_connection()
-    cur = conn.cursor()
-
-    cur.execute("DELETE FROM destinations WHERE id = %s;", (destination_id,))
-    conn.commit()
-
-    conn.close()
-
-    return jsonify({"message": "Destination deleted successfully", "destination_id": destination_id})
 
 # Function to update an aircraft
 @app.route('/aircrafts/<int:aircraft_id>', methods=['PUT'])
@@ -229,11 +220,11 @@ def update_aircraft(aircraft_id):
     # You can update specific columns here based on your requirements
     cur.execute("""
         UPDATE aircrafts 
-        SET name = %s, km_range = %s, first_class_capacity = %s, economy_class_capacity = %s, location = %s
+        SET manufacturer = %s, type = %s, km_range = %s, first_class_capacity = %s, economy_class_capacity = %s, location = %s
         WHERE id = %s
         RETURNING id;
         """,
-        (data['name'], data['km_range'], data['first_class_capacity'], data['economy_class_capacity'], data['location'], aircraft_id))
+        (data['manufacturer'], data['type'], data['km_range'], data['first_class_capacity'], data['economy_class_capacity'], data['location'], aircraft_id))
 
     updated_aircraft_id = cur.fetchone()[0]
 
@@ -241,19 +232,6 @@ def update_aircraft(aircraft_id):
     conn.close()
 
     return jsonify({"message": "Aircraft updated successfully", "aircraft_id": updated_aircraft_id})
-
-# Function to delete an aircraft
-@app.route('/aircrafts/<int:aircraft_id>', methods=['DELETE'])
-def delete_aircraft(aircraft_id):
-    conn = create_connection()
-    cur = conn.cursor()
-
-    cur.execute("DELETE FROM aircrafts WHERE id = %s;", (aircraft_id,))
-    conn.commit()
-
-    conn.close()
-
-    return jsonify({"message": "Aircraft deleted successfully", "aircraft_id": aircraft_id})
 
 # Function to update a flight
 @app.route('/flights/<int:flight_id>', methods=['PUT'])
@@ -278,6 +256,32 @@ def update_flight(flight_id):
 
     return jsonify({"message": "Flight updated successfully", "flight_id": updated_flight_id})
 
+# Function to delete a destination
+@app.route('/destinations/<int:destination_id>', methods=['DELETE'])
+def delete_destination(destination_id):
+    conn = create_connection()
+    cur = conn.cursor()
+
+    cur.execute("DELETE FROM destinations WHERE id = %s;", (destination_id,))
+    conn.commit()
+
+    conn.close()
+
+    return jsonify({"message": "Destination deleted successfully", "destination_id": destination_id})
+
+# Function to delete an aircraft
+@app.route('/aircrafts/<int:aircraft_id>', methods=['DELETE'])
+def delete_aircraft(aircraft_id):
+    conn = create_connection()
+    cur = conn.cursor()
+
+    cur.execute("DELETE FROM aircrafts WHERE id = %s;", (aircraft_id,))
+    conn.commit()
+
+    conn.close()
+
+    return jsonify({"message": "Aircraft deleted successfully", "aircraft_id": aircraft_id})
+
 # Function to delete a flight
 @app.route('/flights/<int:flight_id>', methods=['DELETE'])
 def delete_flight(flight_id):
@@ -295,4 +299,4 @@ def delete_flight(flight_id):
 create_tables()
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run() # debug=True by default debug=False

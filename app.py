@@ -2,25 +2,19 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import psycopg2
 # from psycopg2 import sql
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 CORS(app)
 
-# PostgreSQL database details
-DB_NAME = 'airline_db'
-DB_USER = 'rosen'
-DB_PASSWORD = 'airline_manager'
-DB_HOST = 'database' # 'localhost'
-DB_PORT = '5432' # '6543'
-
 # Connect to the PostgreSQL database
 def create_connection():
     conn = psycopg2.connect(
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        host=DB_HOST,
-        port=DB_PORT
+        dbname = 'airline_db',
+        user = 'rosen',
+        password = 'airline_manager',
+        host = 'localhost',
+        port = '6543'
     )
     return conn
 
@@ -33,8 +27,8 @@ def create_tables():
         destinations_table = """
             CREATE TABLE IF NOT EXISTS destinations (
                 id SERIAL PRIMARY KEY,
-                airport_name TEXT NOT NULL,
-                airport_code TEXT NOT NULL,
+                airport_name TEXT NOT NULL UNIQUE,
+                airport_code TEXT NOT NULL UNIQUE,
                 city TEXT NOT NULL,
                 country TEXT NOT NULL,
                 country_code TEXT NOT NULL
@@ -46,6 +40,7 @@ def create_tables():
                 id SERIAL PRIMARY KEY,
                 manufacturer TEXT NOT NULL,
                 type TEXT NOT NULL,
+                registration TEXT NOT NULL UNIQUE,
                 km_range INTEGER NOT NULL,
                 first_class_capacity INTEGER NOT NULL,
                 economy_class_capacity INTEGER NOT NULL,
@@ -91,8 +86,18 @@ def add_destination():
     country = data['country']
     country_code = data['country_code']
 
-    cur.execute("INSERT INTO destinations (airport_name, airport_code, city, country, country_code) VALUES (%s, %s, %s, %s, %s) RETURNING id;",
-                (airport_name, airport_code, city, country, country_code))
+    try:
+        cur.execute("INSERT INTO destinations (airport_name, airport_code, city, country, country_code) VALUES (%s, %s, %s, %s, %s) RETURNING id;",
+                    (airport_name, airport_code, city, country, country_code))
+    except psycopg2.errors.UniqueViolation:
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "This destination already exists"}), 400
+    except:
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "An error occurred while adding destination"}), 500
+
     destination_id = cur.fetchone()[0]
 
     conn.commit()
@@ -109,13 +114,24 @@ def add_aircraft():
     data = request.json
     manufacturer = data['manufacturer']
     type = data['type']
+    registration = data['registration']
     km_range = data['km_range']
     first_class_capacity = data['first_class_capacity']
     economy_class_capacity = data['economy_class_capacity']
     location = data['location']
 
-    cur.execute("INSERT INTO aircrafts (manufacturer, type, km_range, first_class_capacity, economy_class_capacity, location) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id;",
-                (manufacturer, type, km_range, first_class_capacity, economy_class_capacity, location))
+    try:
+        cur.execute("INSERT INTO aircrafts (manufacturer, type, registration, km_range, first_class_capacity, economy_class_capacity, location) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id;",
+                    (manufacturer, type, registration, km_range, first_class_capacity, economy_class_capacity, location))
+    except psycopg2.errors.UniqueViolation:
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "This aircraft already exists"}), 400
+    except:
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "An error occurred while adding aircraft"}), 500
+
     aircraft_id = cur.fetchone()[0]
 
     conn.commit()
@@ -139,8 +155,60 @@ def add_flight():
     first_class_ticket_price = data['first_class_ticket_price']
     economy_class_ticket_price = data['economy_class_ticket_price']
 
-    cur.execute("INSERT INTO flights (aircraft_id, flight_number, origin, destination, departure_time, arrival_time, first_class_ticket_price, economy_class_ticket_price) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id;",
-                (aircraft_id, flight_number, origin, destination, departure_time, arrival_time, first_class_ticket_price, economy_class_ticket_price))
+    # Check if the selected aircraft has any scheduled flights
+    cur.execute("""
+        SELECT arrival_time, destination
+        FROM flights
+        WHERE aircraft_id = %s
+        ORDER BY arrival_time DESC
+        LIMIT 1;
+        """,
+        (aircraft_id,))
+    
+    last_flight = cur.fetchone()
+
+    if last_flight:
+        last_arrival_time = last_flight[0]
+        last_location = last_flight[1]
+
+        # Check if the last location is the same as the new origin airport
+        if last_location != origin:
+            conn.close()
+            return jsonify({"message": "Last location airport is not the same as the new origin airport"}), 400
+
+        # Check if there is enough time between landing and the next takeoff
+        if datetime.strptime(departure_time, "%Y-%m-%d %H:%M:%S.%f") < last_arrival_time + timedelta(hours=1.5):
+            conn.close()
+            return jsonify({"message": "Not enough time between landing and the next takeoff"}), 400
+    
+    else:
+        cur.execute("""
+            SELECT location
+            FROM aircrafts
+            WHERE id = %s;
+            """,
+            (aircraft_id,))
+        
+        last_location = cur.fetchone()
+
+        # Check if the last location is the same as the new origin airport
+        if last_location != origin:
+            conn.close()
+            return jsonify({"message": "Last location airport is not the same as the new origin airport"}), 400
+
+    # Insert the flight into the database
+    try:
+        cur.execute("INSERT INTO flights (aircraft_id, flight_number, origin, destination, departure_time, arrival_time, first_class_ticket_price, economy_class_ticket_price) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id;",
+            (aircraft_id, flight_number, origin, destination, departure_time, arrival_time, first_class_ticket_price, economy_class_ticket_price))
+    except psycopg2.errors.UniqueViolation:
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "This flight already exists"}), 400
+    except:
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "An error occurred while adding flight"}), 500
+
     flight_id = cur.fetchone()[0]
 
     conn.commit()
@@ -159,7 +227,7 @@ def get_destinations():
 
     conn.close()
 
-    return jsonify({"destinations": destinations})
+    return jsonify({"destinations": destinations}), 200
 
 # Function to fetch all aircrafts
 @app.route('/aircrafts', methods=['GET'])
@@ -172,7 +240,7 @@ def get_aircrafts():
 
     conn.close()
 
-    return jsonify({"aircrafts": aircrafts})
+    return jsonify({"aircrafts": aircrafts}), 200
 
 # Function to fetch all flights
 @app.route('/flights', methods=['GET'])
@@ -185,7 +253,28 @@ def get_flights():
 
     conn.close()
 
-    return jsonify({"flights": flights})
+    return jsonify({"flights": flights}), 200
+
+# Function to fetch flight's estimated earnings
+@app.route('/flights/get-estimated-earnings/<int:flight_id>', methods=['GET'])
+def get_flight_estimated_earnings(flight_id):
+    conn = create_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT /* a.first_class_capacity * f.first_class_ticket_price AS first_class_earnings,
+        a.economy_class_capacity * f.economy_class_ticket_price AS economy_class_earnings, */
+        a.first_class_capacity * f.first_class_ticket_price + a.economy_class_capacity * f.economy_class_ticket_price AS total_earnings
+        FROM flights f
+        JOIN aircrafts a ON f.aircraft_id = a.id
+        WHERE f.id = %s;
+        """,
+        (flight_id,))
+    estimates = cur.fetchone()
+
+    conn.close()
+
+    return jsonify({"estimates": estimates}), 200
 
 # Function to update a destination
 @app.route('/destinations/<int:destination_id>', methods=['PUT'])
@@ -194,21 +283,26 @@ def update_destination(destination_id):
     cur = conn.cursor()
 
     data = request.json
-    # You can update specific columns here based on your requirements
-    cur.execute("""
-        UPDATE destinations 
-        SET airport_name = %s, airport_code = %s, city = %s, country = %s, country_code = %s
-        WHERE id = %s
-        RETURNING id;
-        """,
-        (data['airport_name'], data['airport_code'], data['city'], data['country'], data['country_code'], destination_id))
+
+    try:
+        cur.execute("""
+            UPDATE destinations 
+            SET airport_name = %s, airport_code = %s, city = %s, country = %s, country_code = %s
+            WHERE id = %s
+            RETURNING id;
+            """,
+            (data['airport_name'], data['airport_code'], data['city'], data['country'], data['country_code'], destination_id))
+    except:
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "An error occurred while updating destination"}), 500
 
     updated_destination_id = cur.fetchone()[0]
 
     conn.commit()
     conn.close()
 
-    return jsonify({"message": "Destination updated successfully", "destination_id": updated_destination_id})
+    return jsonify({"message": "Destination updated successfully", "destination_id": updated_destination_id}), 200
 
 # Function to update an aircraft
 @app.route('/aircrafts/<int:aircraft_id>', methods=['PUT'])
@@ -217,21 +311,26 @@ def update_aircraft(aircraft_id):
     cur = conn.cursor()
 
     data = request.json
-    # You can update specific columns here based on your requirements
-    cur.execute("""
-        UPDATE aircrafts 
-        SET manufacturer = %s, type = %s, km_range = %s, first_class_capacity = %s, economy_class_capacity = %s, location = %s
-        WHERE id = %s
-        RETURNING id;
-        """,
-        (data['manufacturer'], data['type'], data['km_range'], data['first_class_capacity'], data['economy_class_capacity'], data['location'], aircraft_id))
+
+    try:
+        cur.execute("""
+            UPDATE aircrafts 
+            SET manufacturer = %s, type = %s, registration = %s, km_range = %s, first_class_capacity = %s, economy_class_capacity = %s, location = %s
+            WHERE id = %s
+            RETURNING id;
+            """,
+            (data['manufacturer'], data['type'], data['registration'], data['km_range'], data['first_class_capacity'], data['economy_class_capacity'], data['location'], aircraft_id))
+    except:
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "An error occurred while updating aircraft"}), 500
 
     updated_aircraft_id = cur.fetchone()[0]
 
     conn.commit()
     conn.close()
 
-    return jsonify({"message": "Aircraft updated successfully", "aircraft_id": updated_aircraft_id})
+    return jsonify({"message": "Aircraft updated successfully", "aircraft_id": updated_aircraft_id}), 200
 
 # Function to update a flight
 @app.route('/flights/<int:flight_id>', methods=['PUT'])
@@ -240,21 +339,26 @@ def update_flight(flight_id):
     cur = conn.cursor()
 
     data = request.json
-    # You can update specific columns here based on your requirements
-    cur.execute("""
-        UPDATE flights 
-        SET aircraft_id = %s, flight_number = %s, origin = %s, destination = %s, departure_time = %s, arrival_time = %s, first_class_ticket_price = %s, economy_class_ticket_price = %s
-        WHERE id = %s
-        RETURNING id;
-        """,
-        (data['aircraft_id'], data['flight_number'], data['origin'], data['destination'], data['departure_time'], data['arrival_time'], data['first_class_ticket_price'], data['economy_class_ticket_price'], flight_id))
+
+    try:
+        cur.execute("""
+            UPDATE flights 
+            SET aircraft_id = %s, flight_number = %s, origin = %s, destination = %s, departure_time = %s, arrival_time = %s, first_class_ticket_price = %s, economy_class_ticket_price = %s
+            WHERE id = %s
+            RETURNING id;
+            """,
+            (data['aircraft_id'], data['flight_number'], data['origin'], data['destination'], data['departure_time'], data['arrival_time'], data['first_class_ticket_price'], data['economy_class_ticket_price'], flight_id))
+    except:
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "An error occurred while updating flight"}), 500
 
     updated_flight_id = cur.fetchone()[0]
 
     conn.commit()
     conn.close()
 
-    return jsonify({"message": "Flight updated successfully", "flight_id": updated_flight_id})
+    return jsonify({"message": "Flight updated successfully", "flight_id": updated_flight_id}), 200
 
 # Function to delete a destination
 @app.route('/destinations/<int:destination_id>', methods=['DELETE'])
@@ -262,12 +366,17 @@ def delete_destination(destination_id):
     conn = create_connection()
     cur = conn.cursor()
 
-    cur.execute("DELETE FROM destinations WHERE id = %s;", (destination_id,))
-    conn.commit()
+    try:
+        cur.execute("DELETE FROM destinations WHERE id = %s;", (destination_id,))
+    except:
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "An error occurred while deleting destination"}), 500
 
+    conn.commit()
     conn.close()
 
-    return jsonify({"message": "Destination deleted successfully", "destination_id": destination_id})
+    return jsonify({"message": "Destination deleted successfully", "destination_id": destination_id}), 200
 
 # Function to delete an aircraft
 @app.route('/aircrafts/<int:aircraft_id>', methods=['DELETE'])
@@ -275,12 +384,17 @@ def delete_aircraft(aircraft_id):
     conn = create_connection()
     cur = conn.cursor()
 
-    cur.execute("DELETE FROM aircrafts WHERE id = %s;", (aircraft_id,))
-    conn.commit()
+    try:
+        cur.execute("DELETE FROM aircrafts WHERE id = %s;", (aircraft_id,))
+    except:
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "An error occurred while deleting aircraft"}), 500
 
+    conn.commit()
     conn.close()
 
-    return jsonify({"message": "Aircraft deleted successfully", "aircraft_id": aircraft_id})
+    return jsonify({"message": "Aircraft deleted successfully", "aircraft_id": aircraft_id}), 200
 
 # Function to delete a flight
 @app.route('/flights/<int:flight_id>', methods=['DELETE'])
@@ -288,15 +402,20 @@ def delete_flight(flight_id):
     conn = create_connection()
     cur = conn.cursor()
 
-    cur.execute("DELETE FROM flights WHERE id = %s;", (flight_id,))
-    conn.commit()
+    try:
+        cur.execute("DELETE FROM flights WHERE id = %s;", (flight_id,))
+    except:
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "An error occurred while deleting flight"}), 500
 
+    conn.commit()
     conn.close()
 
-    return jsonify({"message": "Flight deleted successfully", "flight_id": flight_id})
+    return jsonify({"message": "Flight deleted successfully", "flight_id": flight_id}), 200
 
 # Run create_tables function when the app starts
 create_tables()
 
 if __name__ == '__main__':
-    app.run() # debug=True by default debug=False
+    app.run() # debug=True is possible, by default debug=False

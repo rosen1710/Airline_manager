@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>View Tables</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #dddddd;
+            text-align: left;
+            padding: 8px;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Destinations</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Airport Name</th>
+                <th>Airport Code</th>
+                <th>City</th>
+                <th>Country</th>
+                <th>Country Code</th>
+            </tr>
+        </thead>
+        <tbody id="destinationsTable">
+            <!-- Data will be displayed here -->
+        </tbody>
+    </table>
+
+    <h1>Aircrafts</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Manufacturer</th>
+                <th>Type</th>
+                <th>Registration</th>
+                <th>Range in km</th>
+                <th>First Class Capacity</th>
+                <th>Economy Class Capacity</th>
+                <th>Start location ID</th>
+            </tr>
+        </thead>
+        <tbody id="aircraftsTable">
+            <!-- Data will be displayed here -->
+        </tbody>
+    </table>
+
+    <h1>Flights</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Aircraft ID</th>
+                <th>Flight Number</th>
+                <th>Origin ID</th>
+                <th>Destination ID</th>
+                <th>Departure Time</th>
+                <th>Arrival Time</th>
+                <th>First Class Ticket Price</th>
+                <th>Economy Class Ticket Price</th>
+            </tr>
+        </thead>
+        <tbody id="flightsTable">
+            <!-- Data will be displayed here -->
+        </tbody>
+    </table>
+
+    <script>
+        // Fetch data for destinations, aircrafts, and flights tables
+        async function fetchData(url, tableId) {
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                const table = document.getElementById(tableId);
+                if (data.destinations || data.aircrafts || data.flights) {
+                    let headers = [];
+                    let rows = "";
+
+                    if (data.destinations) {
+                        headers = Object.keys(data.destinations[0]);
+                        // rows += `<tr>${headers.map(header => `<th>${header}</th>`).join('')}</tr>`;
+                        data.destinations.forEach(row => {
+                            rows += `<tr>${headers.map(header => `<td>${row[header]}</td>`).join('')}</tr>`;
+                        });
+                    } else if (data.aircrafts) {
+                        headers = Object.keys(data.aircrafts[0]);
+                        // rows += `<tr>${headers.map(header => `<th>${header}</th>`).join('')}</tr>`;
+                        data.aircrafts.forEach(row => {
+                            rows += `<tr>${headers.map(header => `<td>${row[header]}</td>`).join('')}</tr>`;
+                        });
+                    } else if (data.flights) {
+                        headers = Object.keys(data.flights[0]);
+                        // rows += `<tr>${headers.map(header => `<th>${header}</th>`).join('')}</tr>`;
+                        data.flights.forEach(row => {
+                            rows += `<tr>${headers.map(header => `<td>${row[header]}</td>`).join('')}</tr>`;
+                        });
+                    }
+
+                    table.innerHTML = rows;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        // Call fetchData function for each table
+        fetchData('http://127.0.0.1:5000/destinations', 'destinationsTable');
+        fetchData('http://127.0.0.1:5000/aircrafts', 'aircraftsTable');
+        fetchData('http://127.0.0.1:5000/flights', 'flightsTable');
+
+        setInterval(() => {
+            fetchData('http://127.0.0.1:5000/destinations', 'destinationsTable');
+            fetchData('http://127.0.0.1:5000/aircrafts', 'aircraftsTable');
+            fetchData('http://127.0.0.1:5000/flights', 'flightsTable');
+        }, 5000);
+    </script>
+</body>
+</html>
